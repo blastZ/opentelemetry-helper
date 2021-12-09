@@ -1,4 +1,4 @@
-import { context, Exception, SpanStatusCode, trace } from "@opentelemetry/api";
+import { context, SpanStatusCode, trace } from "@opentelemetry/api";
 
 export function Span(name?: string) {
   return function (
@@ -8,16 +8,15 @@ export function Span(name?: string) {
   ) {
     const method = descriptor.value;
 
+    const metadataKeys = Reflect.getMetadataKeys(method);
+
     descriptor.value = function (...args: any[]) {
       const tracer = trace.getTracer("default");
-      const currentSpan =
-        trace.getSpan(context.active()) || tracer.startSpan("default");
+      const span = tracer.startSpan(
+        name || `${target.constructor.name}.${propertyKey}`
+      );
 
-      return context.with(trace.setSpan(context.active(), currentSpan), () => {
-        const span = tracer.startSpan(
-          name || `${target.constructor.name}.${propertyKey}`
-        );
-
+      return context.with(trace.setSpan(context.active(), span), () => {
         if (method.constructor.name === "AsyncFunction") {
           return method
             .apply(this, args)
@@ -41,7 +40,10 @@ export function Span(name?: string) {
           return result;
         } catch (err: any) {
           span.recordException(err);
-          span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: err.message,
+          });
 
           throw err;
         } finally {
@@ -49,6 +51,12 @@ export function Span(name?: string) {
         }
       });
     };
+
+    for (const metadataKey of metadataKeys) {
+      const metadata = Reflect.getMetadata(metadataKey, method);
+
+      Reflect.defineMetadata(metadataKey, metadata, descriptor.value);
+    }
 
     return descriptor;
   };

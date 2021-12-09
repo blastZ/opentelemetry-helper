@@ -12,16 +12,7 @@ export function Trace(): ClassDecorator {
         descriptor.value !== target &&
         descriptor.value instanceof Function
       ) {
-        const method = descriptor.value;
-        const metadataKeys = Reflect.getMetadataKeys(method);
-
         const newDescriptor = Span()(target.prototype, key, descriptor);
-
-        for (const metadataKey of metadataKeys) {
-          const metadata = Reflect.getMetadata(metadataKey, method);
-
-          Reflect.defineMetadata(metadataKey, metadata, newDescriptor.value);
-        }
 
         Object.defineProperty(target.prototype, key, newDescriptor);
       }
